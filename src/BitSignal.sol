@@ -79,12 +79,12 @@ contract BitSignal {
         require(!betInitiated, "bet already started");
 
         if (usdcDeposited) {
-            USDC.transfer(balajis, USDC.balanceOf(address(this)));
             usdcDeposited = false;
+            USDC.transfer(balajis, USDC.balanceOf(address(this)));
         }
         if (wbtcDeposited) {
-            WBTC.transfer(counterparty, WBTC.balanceOf(address(this)));
             wbtcDeposited = false;
+            WBTC.transfer(counterparty, WBTC.balanceOf(address(this)));
         }
     }
 
