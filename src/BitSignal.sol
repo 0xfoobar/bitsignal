@@ -90,8 +90,11 @@ contract BitSignal {
 
     /// @notice Once 90 days have passed, query Chainlink BTC/USD price feed to determine the winner and send them both collaterals.
     function settle() external {
-        require(betInitiated && block.timestamp >= startTimestamp + BET_LENGTH, "bet not finished");
+        require(betInitiated, "bet not initiated");
+        require(block.timestamp >= startTimestamp + BET_LENGTH, "bet not finished");
 
+        betInitiated = false;
+        
         uint256 wbtcPrice = chainlinkPrice() / 10**priceFeed.decimals();
 
         address winner;
