@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
+
 import {BitSignal, ERC20} from "../src/BitSignal.sol";
 
 contract BigSignalTest is Test {
@@ -10,8 +11,8 @@ contract BigSignalTest is Test {
     ERC20 constant WBTC = ERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599); // 8 decimals
     address public balajis = address(0x1);
     address public counterparty = address(0x2);
-    address usdcWhale = 0xF977814e90dA44bFA03b6295A0616a897441aceC; // arbitrary holder addresses chosen to seed our tests
-    address wbtcWhale = 0x6daB3bCbFb336b29d06B9C793AEF7eaA57888922;
+    address usdcWhale = 0x0A59649758aa4d66E25f08Dd01271e891fe52199; // arbitrary holder addresses chosen to seed our tests
+    address wbtcWhale = 0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656;
 
     function setUp() public {
         bitsignal = new BitSignal(balajis, counterparty);
@@ -23,11 +24,19 @@ contract BigSignalTest is Test {
     }
 
     function testDepositAndInitiateBetAndSettle() public {
+        console2.logString('testDepositAndInitiateBetAndSettle beginning...');
+        console2.logString('USDC whale balance:');
+        uint256 usdsWhaleBalance = USDC.balanceOf(usdcWhale);
+        console2.logUint(usdsWhaleBalance);
+        console2.log('USDC whale balance: %d', usdsWhaleBalance);
         // Fund balajis and counterparty for test prep
         vm.prank(usdcWhale);
         USDC.transfer(balajis, 1_000_000e6);
+        console2.logString('USDC been transferred');
         vm.prank(wbtcWhale);
         WBTC.transfer(counterparty, 1e8);
+        console.logString('WBTC been transferred');
+
 
         // Now simulate the deposits
         vm.startPrank(balajis);

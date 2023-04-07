@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: CC0-1.0
 pragma solidity ^0.8.19;
 
+import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
+import '@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol';
+
 interface ERC20 {
     function approve(address spender, uint256 amount) external;
     function transfer(address recipient, uint256 amount) external;
