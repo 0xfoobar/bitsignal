@@ -51,7 +51,8 @@ contract BitSignal is Ownable {
       address(USDC), // Circle USDC
       0xdAC17F958D2ee523a2206206994597C13D831ec7, // Tether USDT
       0x4Fabb145d64652a948d72533023f6E7A623C7C53, // Binance BUSD
-      0x8E870D67F660D95d5be530380D0eC0bd388289E1 // Paxos USDP
+      0x8E870D67F660D95d5be530380D0eC0bd388289E1, // Paxos USDP
+      0x6B175474E89094C44Da98b954EedeAC495271d0F  // DAI stablecoin
     ];
 
     modifier swapAllowed(address token) {
@@ -62,7 +63,7 @@ contract BitSignal is Ownable {
       uint256 usdcPrice = chainlinkPrice(usdcPriceFeed);
       require(usdcPrice <= STABLECOIN_MIN_PRICE, "Collateral coin haven`t lost its peg");
       bool found;
-      for (uint i=0; i<4; i++) {
+      for (uint i=0; i<5; i++) {
         if (STABLECOIN_CONTRACTS[i] == token) {
           found = true;
         }
