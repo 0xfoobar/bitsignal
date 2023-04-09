@@ -6,8 +6,6 @@ import '@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "forge-std/console2.sol";
-
 interface AggregatorV3Interface {
   function decimals() external view returns (uint8);
 
@@ -158,17 +156,11 @@ contract BitSignal is Ownable {
             winner = counterparty;
         }
 
-        console2.log('Winner choosen %s', winner);
-        console2.log('Collateral address: %s', address(collateral));
-        console2.log('Collateral balance: %d', collateral.balanceOf(address(this)));
-
         SafeERC20.safeTransfer(collateral, winner, collateral.balanceOf(address(this)));
         //collateral.transfer(winner, collateral.balanceOf(address(this)));
-        console2.log('Collateral transferred');
         WBTC.transfer(winner, WBTC.balanceOf(address(this)));
         // in case there wasn't enough liquidity in Uniswap pool and some USDC change left
         if (address(collateral) != address(USDC)) {
-          console2.log('Before change transfer');
           USDC.transfer(winner, USDC.balanceOf(address(this)));
         }
     }

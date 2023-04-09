@@ -29,17 +29,17 @@ contract BigSignalTest is Test {
         bitsignal = new BitSignal(balajis, counterparty, address(mockUsdcPriceFeed), address(mockBtcPriceFeed));
     }
 
-    function testSettle() public {
+    function testSettle() view public {
         AggregatorV3Interface btcPriceFeed = AggregatorV3Interface(0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c); // 8 decimals
         uint256 price = bitsignal.chainlinkPrice(btcPriceFeed) / 1e8;
-        console2.log(price);
+        console2.log("BTC price: %s", price);
     }
 
     function fundParticipantWallets() private {
-      console2.logString('USDC whale balance:');
-      uint256 usdsWhaleBalance = USDC.balanceOf(usdcWhale);
-      console2.logUint(usdsWhaleBalance);
-      console2.log('USDC whale balance: %d', usdsWhaleBalance);
+      uint256 usdcWhaleBalance = USDC.balanceOf(usdcWhale);
+      console2.log('USDC whale balance: %d', usdcWhaleBalance);
+      uint256 wbtcWhaleBalance = WBTC.balanceOf(wbtcWhale);
+      console2.log('WBTC whale balance: %d', wbtcWhaleBalance);
       // Fund balajis and counterparty for test prep
       vm.prank(usdcWhale);
       USDC.transfer(balajis, 1_000_000e6);
@@ -150,11 +150,40 @@ contract BigSignalTest is Test {
 
       // Successfully settle after expiry
       vm.warp(block.timestamp + 100 days);
+      mockBtcPriceFeed.setAnswer(999_999 * 1e8);
       bitsignal.settle();
 
       // Check that winnings received
       assertEq(USDT.balanceOf(counterparty), usdtBeforeSettlement + swapOutput);
       assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
+    }
+
+    function testChangeBeenTransferred() public {
+      fundParticipantWallets();
+      startBet();
+      mockUsdcPriceFeed.setAnswer(95000000);
+      vm.prank(arbitor);
+      uint256 swapOutput = bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+      // simulate change after swap
+      uint256 change = 10_000*10**USDC.decimals(); 
+      vm.prank(usdcWhale);
+      USDC.transfer(address(bitsignal), change);
+
+
+      uint256 usdtBeforeSettlement = USDT.balanceOf(counterparty);
+      uint256 usdcBeforeSettlement = USDC.balanceOf(counterparty);
+      uint256 wbtcBeforeSettlement = WBTC.balanceOf(counterparty);
+
+      // Successfully settle after expiry
+      vm.warp(block.timestamp + 100 days);
+      mockBtcPriceFeed.setAnswer(999_999 * 1e8);
+      bitsignal.settle();
+
+      // Check that winnings received
+      assertEq(USDT.balanceOf(counterparty), usdtBeforeSettlement + swapOutput);
+      assertEq(USDC.balanceOf(counterparty), usdcBeforeSettlement + change);
+      assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
+
     }
 
     function testOnRealPriceFeeds() public {
@@ -187,14 +216,3 @@ contract BigSignalTest is Test {
 
 
 }
-
-
-// test balajis wins the bet
-// test counterparty wins the bet
-// test swap is not allowed to anyone other than arbitor
-// test swap is not allowed before bet is initiated
-// test swap is not allowed if USDC haven't lost is peg
-// test winner recieves alternatiwe stablecoin after swap
-// test winner receives a change if not all amount of USDC been swapped
-// test on fork and on mainner for price feed
-
