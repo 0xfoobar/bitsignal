@@ -23,6 +23,9 @@ interface AggregatorV3Interface {
 
 contract BitSignal is Ownable {
 
+    event BetStarted();
+    event BetSettled();
+
     uint256 constant BET_LENGTH = 90 days;
     uint256 constant PRICE_THRESHOLD = 1_000_000; // 1 million USD per BTC
     uint256 constant USDC_AMOUNT = 1_000_000e6;
@@ -115,6 +118,7 @@ contract BitSignal is Ownable {
         if (wbtcDeposited) {
             betInitiated = true;
             startTimestamp = block.timestamp;
+            emit BetStarted();
         }
     }
 
@@ -126,6 +130,7 @@ contract BitSignal is Ownable {
 
         if (usdcDeposited) {
             betInitiated = true;
+            emit BetStarted();
             startTimestamp = block.timestamp;
         }
     }
@@ -167,6 +172,8 @@ contract BitSignal is Ownable {
         } else {
             winner = counterparty;
         }
+
+        emit BetSettled();
     }
 
     /// @notice Fetch the token price with 8 decimals included
