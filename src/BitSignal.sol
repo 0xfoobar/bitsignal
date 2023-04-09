@@ -37,9 +37,9 @@ contract BitSignal is Ownable {
     AggregatorV3Interface immutable btcPriceFeed;
     AggregatorV3Interface immutable usdcPriceFeed;
 
-    IERC20 collateral = USDC;
     address public immutable balajis;
     address public immutable counterparty;
+    address public winner;
     
     bool internal usdcDeposited;
     bool internal wbtcDeposited;
@@ -99,11 +99,10 @@ contract BitSignal is Ownable {
                 path: _encodePathV3(hops, fees),
                 recipient: address(this),
                 deadline: block.timestamp,
-                amountIn: USDC_AMOUNT,
+                amountIn: USDC.balanceOf(address(this)),
                 amountOutMinimum: amountMinimum
             });
       uint256 output = swapRouter.exactInput(params);
-      collateral = IERC20(hops[hops.length-1]);
       return output;
     }
 
@@ -146,6 +145,14 @@ contract BitSignal is Ownable {
         }
     }
 
+    /// @notice This will let the winner to take out any token from contract
+    function claim(address token) external {
+      require(msg.sender == winner, "Imposter!");
+      // any contract cound be passed as an input - looks as a security breach
+      // but there is no need for safety check - we already checked that sender is a winner and he should be allowed to do whatewer
+      SafeERC20.safeTransfer(IERC20(token), winner, IERC20(token).balanceOf(address(this)));
+    }
+
     /// @notice Once 90 days have passed, query Chainlink BTC/USD price feed to determine the winner and send them both collaterals.
     function settle() external {
         require(betInitiated, "bet not initiated");
@@ -155,18 +162,10 @@ contract BitSignal is Ownable {
         
         uint256 wbtcPrice = chainlinkPrice(btcPriceFeed) / 10**btcPriceFeed.decimals();
 
-        address winner;
         if (wbtcPrice >= PRICE_THRESHOLD) {
             winner = balajis;
         } else {
             winner = counterparty;
-        }
-
-        SafeERC20.safeTransfer(collateral, winner, collateral.balanceOf(address(this)));
-        WBTC.transfer(winner, WBTC.balanceOf(address(this)));
-        // in case there wasn't enough liquidity in Uniswap pool and some USDC change left
-        if (address(collateral) != address(USDC)) {
-          USDC.transfer(winner, USDC.balanceOf(address(this)));
         }
     }
 

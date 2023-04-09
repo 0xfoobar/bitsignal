@@ -86,6 +86,20 @@ contract BigSignalTest is Test {
         mockBtcPriceFeed.setAnswer(999_999 * 1e8);
         bitsignal.settle();
 
+        // check that lost party cannot claim reward
+        vm.stopPrank();
+        vm.startPrank(balajis);
+        vm.expectRevert("Imposter!");
+        bitsignal.claim(address(USDC));
+        vm.expectRevert("Imposter!");
+        bitsignal.claim(address(WBTC));
+
+        // claim reward
+        vm.stopPrank();
+        vm.startPrank(counterparty);
+        bitsignal.claim(address(USDC));
+        bitsignal.claim(address(WBTC));
+
         // Check that winnings received
         assertEq(USDC.balanceOf(counterparty), usdcBeforeSettlement + 1_000_000e6);
         assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
@@ -102,6 +116,19 @@ contract BigSignalTest is Test {
         vm.warp(block.timestamp + 100 days);
         mockBtcPriceFeed.setAnswer(1_000_001 * 1e8);
         bitsignal.settle();
+
+        vm.startPrank(counterparty);
+        vm.expectRevert("Imposter!");
+        bitsignal.claim(address(USDC));
+        vm.expectRevert("Imposter!");
+        bitsignal.claim(address(WBTC));
+
+        //claim reward
+        vm.stopPrank();
+        vm.startPrank(balajis);
+        bitsignal.claim(address(USDC));
+        bitsignal.claim(address(WBTC));
+
 
         // Check that winnings received
         assertEq(USDC.balanceOf(balajis), usdcBeforeSettlement + 1_000_000e6);
@@ -166,18 +193,23 @@ contract BigSignalTest is Test {
       mockBtcPriceFeed.setAnswer(999_999 * 1e8);
       bitsignal.settle();
 
+      //claim reward
+      vm.startPrank(counterparty);
+      bitsignal.claim(address(USDT));
+      bitsignal.claim(address(WBTC));
+
       // Check that winnings received
       assertEq(USDT.balanceOf(counterparty), usdtBeforeSettlement + swapOutput);
       assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
     }
 
-    function testChangeBeenTransferred() public {
+    function testClaimChange() public {
       fundParticipantWallets();
       startBet();
       mockUsdcPriceFeed.setAnswer(95000000);
       vm.prank(arbitor);
       uint256 swapOutput = bitsignal.swapCollateral(900_000e6, hops, fees);
-      // simulate change after swap
+      // simulate non-complete swap
       uint256 change = 10_000*10**USDC.decimals(); 
       vm.prank(usdcWhale);
       USDC.transfer(address(bitsignal), change);
@@ -191,6 +223,13 @@ contract BigSignalTest is Test {
       vm.warp(block.timestamp + 100 days);
       mockBtcPriceFeed.setAnswer(999_999 * 1e8);
       bitsignal.settle();
+
+      //claim reward
+      vm.startPrank(counterparty);
+      bitsignal.claim(address(USDC));
+      bitsignal.claim(address(USDT));
+      bitsignal.claim(address(WBTC));
+
 
       // Check that winnings received
       assertEq(USDT.balanceOf(counterparty), usdtBeforeSettlement + swapOutput);
@@ -219,6 +258,17 @@ contract BigSignalTest is Test {
       // Successfully settle after expiry
       vm.warp(block.timestamp + 100 days);
       bitsignal.settle();
+
+      if (bitsignal.winner() == balajis) {
+        vm.startPrank(balajis);
+      } else {
+        vm.startPrank(counterparty);
+      }
+
+      //claim reward
+      bitsignal.claim(address(USDC));
+      bitsignal.claim(address(USDT));
+      bitsignal.claim(address(WBTC));
 
       console2.log("WBTC balance of balajis: %d", WBTC.balanceOf(balajis) / 10**WBTC.decimals());
       console2.log("USDC balance of balajis: %d", USDC.balanceOf(balajis) / 10**USDC.decimals());
