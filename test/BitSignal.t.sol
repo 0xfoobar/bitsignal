@@ -5,21 +5,26 @@ import "forge-std/Test.sol";
 
 import "forge-std/interfaces/IERC20.sol";
 import {BitSignal, AggregatorV3Interface} from "../src/BitSignal.sol";
+import {MockPriceFeed} from "./MockPriceFeed.sol";
 
 contract BigSignalTest is Test {
     BitSignal public bitsignal;
+    MockPriceFeed public mockUsdcPriceFeed;
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48); // 6 decimals
     IERC20 constant WBTC = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599); // 8 decimals
+    IERC20 constant USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    IERC20 constant WETH9 = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address public balajis = address(0x1);
     address public counterparty = address(0x2);
     address public arbitor = address(0x3);
     address usdcWhale = 0x0A59649758aa4d66E25f08Dd01271e891fe52199; // arbitrary holder addresses chosen to seed our tests
     address wbtcWhale = 0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656;
-    address Tether_USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+    address USDC_PRICE_FEED_ADDRESS = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     function setUp() public {
+        mockUsdcPriceFeed = new MockPriceFeed();
         vm.prank(arbitor);
-        bitsignal = new BitSignal(balajis, counterparty);
+        bitsignal = new BitSignal(balajis, counterparty, address(mockUsdcPriceFeed));
     }
 
     function testSettle() public {
@@ -91,8 +96,40 @@ contract BigSignalTest is Test {
     }
 
     function testSwap() public {
+      // Fund balajis and counterparty for test prep
+      vm.prank(usdcWhale);
+      USDC.transfer(balajis, 1_000_000e6);
+      vm.prank(wbtcWhale);
+      WBTC.transfer(counterparty, 1e8);
+
+
+      vm.startPrank(balajis);
+      USDC.approve(address(bitsignal), type(uint256).max);
+      bitsignal.depositUSDC();
+      vm.stopPrank();
+
+      vm.startPrank(counterparty);
+      WBTC.approve(address(bitsignal), type(uint256).max);
+      bitsignal.depositWBTC();
+      vm.stopPrank();
+
+      mockUsdcPriceFeed.setAnswer(95000000);
+              (
+            /* uint80 roundID */,
+            int price,
+            /*uint startedAt*/,
+            /*uint timeStamp*/,
+            /*uint80 answeredInRound*/
+        ) = mockUsdcPriceFeed.latestRoundData();
+
+      console2.log('Decimals: %d', mockUsdcPriceFeed.decimals());
+      console2.log('Mocked price: %d', price);
       vm.prank(arbitor);
-      bitsignal.swapCollateral(Tether_USDT, 0, 3000);
+      uint256 output = bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+
+      console2.log("Output: %d", output);
+      console2.log("USDC balance after swap: %d", USDC.balanceOf(address(bitsignal)));
+      console2.log("USDT balance after swap: %d", USDT.balanceOf(address(bitsignal)));
     }
 
 }

@@ -30,14 +30,15 @@ contract BitSignal is Ownable {
     uint256 constant WBTC_AMOUNT = 1e8;
     uint256 constant STABLECOIN_MIN_PRICE = 97000000; // if price drops below 97 cents consider it as a depeg and permit swap
 
-    address constant UNISWAP_ROUTER = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    address constant USDC_ADDRESS = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    IERC20 constant USDC = IERC20(USDC_ADDRESS); // 6 decimals
+    address constant UNISWAP_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address constant WETH_CONTRACT = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48); // 6 decimals
     IERC20 constant WBTC = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599); // 8 decimals
 
-    AggregatorV3Interface btcPriceFeed = AggregatorV3Interface(0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c); // 8 decimals
-    AggregatorV3Interface usdcPriceFeed = AggregatorV3Interface(0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6); // 8 decimals
+    AggregatorV3Interface immutable btcPriceFeed = AggregatorV3Interface(0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c); // 8 decimals
+    AggregatorV3Interface immutable usdcPriceFeed;
 
+    IERC20 collateral = USDC;
     address public immutable balajis;
     address public immutable counterparty;
     
@@ -48,7 +49,7 @@ contract BitSignal is Ownable {
     uint256 public startTimestamp;
 
     address[] STABLECOIN_CONTRACTS = [
-      USDC_ADDRESS, // Circle USDC
+      address(USDC), // Circle USDC
       0xdAC17F958D2ee523a2206206994597C13D831ec7, // Tether USDT
       0x4Fabb145d64652a948d72533023f6E7A623C7C53, // Binance BUSD
       0x8E870D67F660D95d5be530380D0eC0bd388289E1 // Paxos USDP
@@ -58,6 +59,7 @@ contract BitSignal is Ownable {
       // this function will be used only in case of emergency
       // that`s why its better to consume more gas here due to search in array
       // rather than building map in constructor
+      require(betInitiated, "bet not initiated");
       uint256 usdcPrice = chainlinkPrice(usdcPriceFeed);
       console2.log(usdcPrice);
       require(usdcPrice <= STABLECOIN_MIN_PRICE, "Collateral coin haven`t lost its peg");
@@ -71,27 +73,33 @@ contract BitSignal is Ownable {
       _;
     }
 
-    constructor(address _balajis, address _counterparty) Ownable() {
+    constructor(address _balajis, address _counterparty, address _usdcPriceFeedAddress) Ownable() {
         balajis = _balajis;
         counterparty = _counterparty;
+        usdcPriceFeed = AggregatorV3Interface(_usdcPriceFeedAddress); // 8 decimals
     }
 
     /// @notice Let arbitor to swap collateral in case deposited stablecoin starts to loose it's peg
-    function swapCollateral(address token, uint256 amountMinimum, uint24 poolFee) external onlyOwner swapAllowed(token) returns (uint256) {
+    function swapCollateral(address token, uint256 amountMinimum, uint24 feeToWeth, uint24 feeFromWeth) external onlyOwner swapAllowed(token) returns (uint256) {
       ISwapRouter swapRouter = ISwapRouter(UNISWAP_ROUTER);
-      TransferHelper.safeApprove(USDC_ADDRESS, UNISWAP_ROUTER, USDC_AMOUNT);
-      ISwapRouter.ExactInputSingleParams memory params =
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDRESS,
-                tokenOut: token,
-                fee: poolFee,
+      TransferHelper.safeApprove(address(USDC), UNISWAP_ROUTER, USDC_AMOUNT);
+      ISwapRouter.ExactInputParams memory params =
+            ISwapRouter.ExactInputParams({
+                path: abi.encodePacked(
+                  address(USDC),
+                  feeToWeth,
+                  WETH_CONTRACT,
+                  feeFromWeth,
+                  token
+                ),
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: USDC_AMOUNT,
-                amountOutMinimum: amountMinimum,
-                sqrtPriceLimitX96: 0
+                amountOutMinimum: amountMinimum
             });
-      return swapRouter.exactInputSingle(params);
+      uint256 output = swapRouter.exactInput(params);
+      collateral = IERC20(token);
+      return output;
     }
 
     /// @notice Deposit USDC collateral. This initiates the bet if WBTC already deposited
@@ -149,11 +157,15 @@ contract BitSignal is Ownable {
             winner = counterparty;
         }
 
-        USDC.transfer(winner, USDC.balanceOf(address(this)));
+        collateral.transfer(winner, collateral.balanceOf(address(this)));
         WBTC.transfer(winner, WBTC.balanceOf(address(this)));
+        // in case there wasn't enough liquidity in Uniswap pool and some USDC change left
+        if (address(collateral) != address(USDC)) {
+          USDC.transfer(winner, USDC.balanceOf(address(this)));
+        }
     }
 
-    /// @notice Fetch the BTCUSD price with 8 decimals included
+    /// @notice Fetch the token price with 8 decimals included
     function chainlinkPrice(AggregatorV3Interface priceFeed) public view returns (uint256) {
         (
             /* uint80 roundID */,

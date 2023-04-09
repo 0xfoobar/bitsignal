@@ -11,7 +11,7 @@ contract BitSignalScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        BitSignal bitsignal = new BitSignal(address(0x1), address(0x2));
+        BitSignal bitsignal = new BitSignal(address(0x1), address(0x2), 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6);
 
         vm.stopBroadcast();
 
