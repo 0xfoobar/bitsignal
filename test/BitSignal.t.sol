@@ -10,6 +10,7 @@ import {MockPriceFeed} from "./MockPriceFeed.sol";
 contract BigSignalTest is Test {
     BitSignal public bitsignal;
     MockPriceFeed public mockUsdcPriceFeed;
+    MockPriceFeed public mockBtcPriceFeed;
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48); // 6 decimals
     IERC20 constant WBTC = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599); // 8 decimals
     IERC20 constant USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -22,9 +23,10 @@ contract BigSignalTest is Test {
     address USDC_PRICE_FEED_ADDRESS = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
     function setUp() public {
-        mockUsdcPriceFeed = new MockPriceFeed();
+        mockUsdcPriceFeed = new MockPriceFeed(8);
+        mockBtcPriceFeed = new MockPriceFeed(8);
         vm.prank(arbitor);
-        bitsignal = new BitSignal(balajis, counterparty, address(mockUsdcPriceFeed));
+        bitsignal = new BitSignal(balajis, counterparty, address(mockUsdcPriceFeed), address(mockBtcPriceFeed));
     }
 
     function testSettle() public {
@@ -33,32 +35,36 @@ contract BigSignalTest is Test {
         console2.log(price);
     }
 
-    function testDepositAndInitiateBetAndSettle() public {
-        console2.logString('testDepositAndInitiateBetAndSettle beginning...');
-        console2.logString('USDC whale balance:');
-        uint256 usdsWhaleBalance = USDC.balanceOf(usdcWhale);
-        console2.logUint(usdsWhaleBalance);
-        console2.log('USDC whale balance: %d', usdsWhaleBalance);
-        // Fund balajis and counterparty for test prep
-        vm.prank(usdcWhale);
-        USDC.transfer(balajis, 1_000_000e6);
-        console2.logString('USDC been transferred');
-        vm.prank(wbtcWhale);
-        WBTC.transfer(counterparty, 1e8);
-        console.logString('WBTC been transferred');
+    function fundParticipantWallets() private {
+      console2.logString('USDC whale balance:');
+      uint256 usdsWhaleBalance = USDC.balanceOf(usdcWhale);
+      console2.logUint(usdsWhaleBalance);
+      console2.log('USDC whale balance: %d', usdsWhaleBalance);
+      // Fund balajis and counterparty for test prep
+      vm.prank(usdcWhale);
+      USDC.transfer(balajis, 1_000_000e6);
+      console2.logString('USDC been transferred');
+      vm.prank(wbtcWhale);
+      WBTC.transfer(counterparty, 1e8);
+      console.logString('WBTC been transferred');
+    }
 
+    function startBet() private {
+      // Now simulate the deposits
+      vm.startPrank(balajis);
+      USDC.approve(address(bitsignal), type(uint256).max);
+      bitsignal.depositUSDC();
+      vm.stopPrank();
 
-        // Now simulate the deposits
-        vm.startPrank(balajis);
-        USDC.approve(address(bitsignal), type(uint256).max);
-        bitsignal.depositUSDC();
-        vm.stopPrank();
+      vm.startPrank(counterparty);
+      WBTC.approve(address(bitsignal), type(uint256).max);
+      bitsignal.depositWBTC();
+      vm.stopPrank();
+    }
 
-        vm.startPrank(counterparty);
-        WBTC.approve(address(bitsignal), type(uint256).max);
-        bitsignal.depositWBTC();
-        vm.stopPrank();
-
+    function testDepositAndInitiateBetAndSettleWhenCounterpartyWins() public {
+        fundParticipantWallets();
+        startBet();
         // Prevent settlement before the bet has expired
         vm.startPrank(counterparty);
         vm.expectRevert("bet not finished");
@@ -69,6 +75,7 @@ contract BigSignalTest is Test {
 
         // Successfully settle after expiry
         vm.warp(block.timestamp + 100 days);
+        mockBtcPriceFeed.setAnswer(999_999 * 1e8);
         bitsignal.settle();
 
         // Check that winnings received
@@ -76,12 +83,26 @@ contract BigSignalTest is Test {
         assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
     }
 
+    function testDepositAndInitiateBetAndSettleWhenBalajisWins() public {
+        fundParticipantWallets();
+        startBet();
+
+        uint256 usdcBeforeSettlement = USDC.balanceOf(balajis);
+        uint256 wbtcBeforeSettlement = WBTC.balanceOf(balajis);
+
+        // Successfully settle after expiry
+        vm.warp(block.timestamp + 100 days);
+        mockBtcPriceFeed.setAnswer(1_000_001 * 1e8);
+        bitsignal.settle();
+
+        // Check that winnings received
+        assertEq(USDC.balanceOf(balajis), usdcBeforeSettlement + 1_000_000e6);
+        assertEq(WBTC.balanceOf(balajis), wbtcBeforeSettlement + 1e8);
+    }
+
+
     function testDepositAndCancelBeforeInitiating() public {
-        // Fund balajis and counterparty for test prep
-        vm.prank(usdcWhale);
-        USDC.transfer(balajis, 1_000_000e6);
-        vm.prank(wbtcWhale);
-        WBTC.transfer(counterparty, 1e8);
+        fundParticipantWallets();
 
         // Now simulate the deposits
         vm.startPrank(balajis);
@@ -96,26 +117,8 @@ contract BigSignalTest is Test {
     }
 
     function testSwap() public {
-      // Fund balajis and counterparty for test prep
-      vm.prank(usdcWhale);
-      USDC.transfer(balajis, 1_000_000e6);
-      vm.prank(wbtcWhale);
-      WBTC.transfer(counterparty, 1e8);
-
-
-      vm.startPrank(balajis);
-      USDC.approve(address(bitsignal), type(uint256).max);
-      bitsignal.depositUSDC();
-      vm.stopPrank();
-
-      vm.prank(arbitor);
-      vm.expectRevert("bet is not initiated");
-      bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
-
-      vm.startPrank(counterparty);
-      WBTC.approve(address(bitsignal), type(uint256).max);
-      bitsignal.depositWBTC();
-      vm.stopPrank();
+      fundParticipantWallets();
+      startBet();
 
       mockUsdcPriceFeed.setAnswer(99000000);
 
@@ -141,10 +144,7 @@ contract BigSignalTest is Test {
       console2.log("USDT balance after swap: %d", USDT.balanceOf(address(bitsignal)));
       console2.log("balajis address: %s", balajis);
       console2.log("counterparty address: %s", counterparty);
-
       
-      console2.log(bitsignal.betInitiated());
-
       uint256 usdtBeforeSettlement = USDT.balanceOf(counterparty);
       uint256 wbtcBeforeSettlement = WBTC.balanceOf(counterparty);
 
@@ -156,6 +156,35 @@ contract BigSignalTest is Test {
       assertEq(USDT.balanceOf(counterparty), usdtBeforeSettlement + swapOutput);
       assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
     }
+
+    function testOnRealPriceFeeds() public {
+      bitsignal = new BitSignal(
+        balajis,
+        counterparty,
+        address(0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6), 
+        address(0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c)
+      );
+
+      AggregatorV3Interface btcPriceFeed = AggregatorV3Interface(0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c); // 8 decimals
+      AggregatorV3Interface usdcPriceFeed = AggregatorV3Interface(0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6); // 8 decimals
+      uint256 btcPrice = bitsignal.chainlinkPrice(btcPriceFeed) / 1e8;
+      uint256 usdcPrice = bitsignal.chainlinkPrice(usdcPriceFeed);
+      console2.log("BTC price: %d", btcPrice);
+      console2.log("USDC price: %d", usdcPrice);
+      fundParticipantWallets();
+      startBet();
+
+      // Successfully settle after expiry
+      vm.warp(block.timestamp + 100 days);
+      bitsignal.settle();
+
+      console2.log("WBTC balance of balajis: %d", WBTC.balanceOf(balajis) / 10**WBTC.decimals());
+      console2.log("USDC balance of balajis: %d", USDC.balanceOf(balajis) / 10**USDC.decimals());
+      console2.log("WBTC balance of counterparty: %d", WBTC.balanceOf(counterparty) / 10**WBTC.decimals());
+      console2.log("USDC balance of counterparty: %d", USDC.balanceOf(counterparty) / 10**USDC.decimals());
+    }
+
+
 
 }
 

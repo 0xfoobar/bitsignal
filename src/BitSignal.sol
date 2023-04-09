@@ -36,7 +36,7 @@ contract BitSignal is Ownable {
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48); // 6 decimals
     IERC20 constant WBTC = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599); // 8 decimals
 
-    AggregatorV3Interface immutable btcPriceFeed = AggregatorV3Interface(0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c); // 8 decimals
+    AggregatorV3Interface immutable btcPriceFeed;
     AggregatorV3Interface immutable usdcPriceFeed;
 
     IERC20 collateral = USDC;
@@ -73,10 +73,11 @@ contract BitSignal is Ownable {
       _;
     }
 
-    constructor(address _balajis, address _counterparty, address _usdcPriceFeedAddress) Ownable() {
+    constructor(address _balajis, address _counterparty, address _usdcPriceFeedAddress, address _btcPriceFeedAddress) Ownable() {
         balajis = _balajis;
         counterparty = _counterparty;
         usdcPriceFeed = AggregatorV3Interface(_usdcPriceFeedAddress); // 8 decimals
+        btcPriceFeed = AggregatorV3Interface(_btcPriceFeedAddress); // 8 decimals
     }
 
     /// @notice Let arbitor to swap collateral in case deposited stablecoin starts to loose it's peg

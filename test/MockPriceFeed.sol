@@ -6,13 +6,18 @@ import {AggregatorV3Interface} from '../src/BitSignal.sol';
 contract MockPriceFeed is AggregatorV3Interface {
 
   int256 internal price;
+  uint8 decimalsNumber; 
+
+  constructor(uint8 _decimals) {
+    decimalsNumber = _decimals;
+  }
 
   function setAnswer(int256 _answer) external {
     price = _answer;
   }
 
   function decimals() external view returns (uint8) {
-    return 8;
+    return decimalsNumber;
   }
 
   function latestRoundData()
