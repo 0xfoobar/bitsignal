@@ -14,9 +14,9 @@ contract BigSignalTest is Test {
     IERC20 constant WBTC = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599); // 8 decimals
     IERC20 constant USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
     IERC20 constant WETH9 = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    address public balajis = address(0x1);
-    address public counterparty = address(0x2);
-    address public arbitor = address(0x3);
+    address public balajis = address(0x53Cfaa403a214c9be35011B3Dcfb75D81D2F7B6B);
+    address public counterparty = address(0x83d47D101881A1E52Ae9C6A2272f499601b8fBCF);
+    address public arbitor = address(0xc37B6361aff0A159Ebc4926285C9DDc8a9D0d1bA);
     address usdcWhale = 0x0A59649758aa4d66E25f08Dd01271e891fe52199; // arbitrary holder addresses chosen to seed our tests
     address wbtcWhale = 0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656;
     address USDC_PRICE_FEED_ADDRESS = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
@@ -108,28 +108,64 @@ contract BigSignalTest is Test {
       bitsignal.depositUSDC();
       vm.stopPrank();
 
+      vm.prank(arbitor);
+      vm.expectRevert("bet is not initiated");
+      bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+
       vm.startPrank(counterparty);
       WBTC.approve(address(bitsignal), type(uint256).max);
       bitsignal.depositWBTC();
       vm.stopPrank();
 
-      mockUsdcPriceFeed.setAnswer(95000000);
-              (
-            /* uint80 roundID */,
-            int price,
-            /*uint startedAt*/,
-            /*uint timeStamp*/,
-            /*uint80 answeredInRound*/
-        ) = mockUsdcPriceFeed.latestRoundData();
+      mockUsdcPriceFeed.setAnswer(99000000);
 
-      console2.log('Decimals: %d', mockUsdcPriceFeed.decimals());
-      console2.log('Mocked price: %d', price);
       vm.prank(arbitor);
-      uint256 output = bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+      vm.expectRevert("Collateral coin haven`t lost its peg");
+      bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
 
-      console2.log("Output: %d", output);
+
+      mockUsdcPriceFeed.setAnswer(95000000);
+      vm.prank(balajis);
+      vm.expectRevert("Ownable: caller is not the owner");
+      bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+
+      vm.prank(arbitor);
+      vm.expectRevert("swap to choosen token is not allowed");
+      bitsignal.swapCollateral(address(WETH9), 900_000e6, 500, 3000);
+
+      vm.prank(arbitor);
+      uint256 swapOutput = bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+
+      console2.log("SwapCollateral output: %d", swapOutput);
       console2.log("USDC balance after swap: %d", USDC.balanceOf(address(bitsignal)));
       console2.log("USDT balance after swap: %d", USDT.balanceOf(address(bitsignal)));
+      console2.log("balajis address: %s", balajis);
+      console2.log("counterparty address: %s", counterparty);
+
+      
+      console2.log(bitsignal.betInitiated());
+
+      uint256 usdtBeforeSettlement = USDT.balanceOf(counterparty);
+      uint256 wbtcBeforeSettlement = WBTC.balanceOf(counterparty);
+
+      // Successfully settle after expiry
+      vm.warp(block.timestamp + 100 days);
+      bitsignal.settle();
+
+      // Check that winnings received
+      assertEq(USDT.balanceOf(counterparty), usdtBeforeSettlement + swapOutput);
+      assertEq(WBTC.balanceOf(counterparty), wbtcBeforeSettlement + 1e8);
     }
 
 }
+
+
+// test balajis wins the bet
+// test counterparty wins the bet
+// test swap is not allowed to anyone other than arbitor
+// test swap is not allowed before bet is initiated
+// test swap is not allowed if USDC haven't lost is peg
+// test winner recieves alternatiwe stablecoin after swap
+// test winner receives a change if not all amount of USDC been swapped
+// test on fork and on mainner for price feed
+

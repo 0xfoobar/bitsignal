@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
 import '@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "forge-std/console2.sol";
 
@@ -59,9 +60,8 @@ contract BitSignal is Ownable {
       // this function will be used only in case of emergency
       // that`s why its better to consume more gas here due to search in array
       // rather than building map in constructor
-      require(betInitiated, "bet not initiated");
+      require(betInitiated, "bet is not initiated");
       uint256 usdcPrice = chainlinkPrice(usdcPriceFeed);
-      console2.log(usdcPrice);
       require(usdcPrice <= STABLECOIN_MIN_PRICE, "Collateral coin haven`t lost its peg");
       bool found;
       for (uint i=0; i<4; i++) {
@@ -157,10 +157,17 @@ contract BitSignal is Ownable {
             winner = counterparty;
         }
 
-        collateral.transfer(winner, collateral.balanceOf(address(this)));
+        console2.log('Winner choosen %s', winner);
+        console2.log('Collateral address: %s', address(collateral));
+        console2.log('Collateral balance: %d', collateral.balanceOf(address(this)));
+
+        SafeERC20.safeTransfer(collateral, winner, collateral.balanceOf(address(this)));
+        //collateral.transfer(winner, collateral.balanceOf(address(this)));
+        console2.log('Collateral transferred');
         WBTC.transfer(winner, WBTC.balanceOf(address(this)));
         // in case there wasn't enough liquidity in Uniswap pool and some USDC change left
         if (address(collateral) != address(USDC)) {
+          console2.log('Before change transfer');
           USDC.transfer(winner, USDC.balanceOf(address(this)));
         }
     }
