@@ -55,13 +55,15 @@ contract BitSignal is Ownable {
       0x6B175474E89094C44Da98b954EedeAC495271d0F  // DAI stablecoin
     ];
 
-    modifier swapAllowed(address token) {
+    modifier swapAllowed(address[] calldata hops) {
       // this function will be used only in case of emergency
       // that`s why its better to consume more gas here due to search in array
       // rather than building map in constructor
       require(betInitiated, "bet is not initiated");
       uint256 usdcPrice = chainlinkPrice(usdcPriceFeed);
       require(usdcPrice <= STABLECOIN_MIN_PRICE, "Collateral coin haven`t lost its peg");
+      require(hops.length > 1, "Should be at leas one hoop");
+      address token = hops[hops.length-1];
       bool found;
       for (uint i=0; i<5; i++) {
         if (STABLECOIN_CONTRACTS[i] == token) {
@@ -79,26 +81,29 @@ contract BitSignal is Ownable {
         btcPriceFeed = AggregatorV3Interface(_btcPriceFeedAddress); // 8 decimals
     }
 
+    function _encodePathV3(address[] calldata _hops, uint24[] calldata _fees) internal view returns (bytes memory path) {
+        require(_fees.length == _hops.length, "Wrong fees count");
+        path = abi.encodePacked(address(USDC));
+        for(uint i = 0; i < _hops.length; i++){
+            path = abi.encodePacked(path, _fees[i], _hops[i]);
+        }
+        return path;
+    }
+
     /// @notice Let arbitor to swap collateral in case deposited stablecoin starts to loose it's peg
-    function swapCollateral(address token, uint256 amountMinimum, uint24 feeToWeth, uint24 feeFromWeth) external onlyOwner swapAllowed(token) returns (uint256) {
+    function swapCollateral(uint256 amountMinimum, address[] calldata hops, uint24[] calldata fees) external onlyOwner swapAllowed(hops) returns (uint256) {
       ISwapRouter swapRouter = ISwapRouter(UNISWAP_ROUTER);
       TransferHelper.safeApprove(address(USDC), UNISWAP_ROUTER, USDC_AMOUNT);
       ISwapRouter.ExactInputParams memory params =
             ISwapRouter.ExactInputParams({
-                path: abi.encodePacked(
-                  address(USDC),
-                  feeToWeth,
-                  WETH_CONTRACT,
-                  feeFromWeth,
-                  token
-                ),
+                path: _encodePathV3(hops, fees),
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: USDC_AMOUNT,
                 amountOutMinimum: amountMinimum
             });
       uint256 output = swapRouter.exactInput(params);
-      collateral = IERC20(token);
+      collateral = IERC20(hops[hops.length-1]);
       return output;
     }
 
@@ -158,7 +163,6 @@ contract BitSignal is Ownable {
         }
 
         SafeERC20.safeTransfer(collateral, winner, collateral.balanceOf(address(this)));
-        //collateral.transfer(winner, collateral.balanceOf(address(this)));
         WBTC.transfer(winner, WBTC.balanceOf(address(this)));
         // in case there wasn't enough liquidity in Uniswap pool and some USDC change left
         if (address(collateral) != address(USDC)) {

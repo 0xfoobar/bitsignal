@@ -22,10 +22,18 @@ contract BigSignalTest is Test {
     address wbtcWhale = 0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656;
     address USDC_PRICE_FEED_ADDRESS = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
 
+    uint24[] fees;
+    address[] hops;
+
+
     function setUp() public {
         mockUsdcPriceFeed = new MockPriceFeed(8);
         mockBtcPriceFeed = new MockPriceFeed(8);
         vm.prank(arbitor);
+        fees.push(uint24(500));
+        fees.push(uint24(3000));
+        hops.push(address(WETH9));
+        hops.push(address(USDT));
         bitsignal = new BitSignal(balajis, counterparty, address(mockUsdcPriceFeed), address(mockBtcPriceFeed));
     }
 
@@ -124,20 +132,25 @@ contract BigSignalTest is Test {
 
       vm.prank(arbitor);
       vm.expectRevert("Collateral coin haven`t lost its peg");
-      bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+
+      bitsignal.swapCollateral(900_000e6, hops, fees);
 
 
       mockUsdcPriceFeed.setAnswer(95000000);
       vm.prank(balajis);
       vm.expectRevert("Ownable: caller is not the owner");
-      bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+      bitsignal.swapCollateral(900_000e6, hops, fees);
 
       vm.prank(arbitor);
       vm.expectRevert("swap to choosen token is not allowed");
-      bitsignal.swapCollateral(address(WETH9), 900_000e6, 500, 3000);
+      hops.push(address(WBTC));
+      fees.push(3000);
+      bitsignal.swapCollateral(900_000e6, hops, fees);
+      hops.pop();
+      fees.pop();
 
       vm.prank(arbitor);
-      uint256 swapOutput = bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+      uint256 swapOutput = bitsignal.swapCollateral(900_000e6, hops, fees);
 
       console2.log("SwapCollateral output: %d", swapOutput);
       console2.log("USDC balance after swap: %d", USDC.balanceOf(address(bitsignal)));
@@ -163,7 +176,7 @@ contract BigSignalTest is Test {
       startBet();
       mockUsdcPriceFeed.setAnswer(95000000);
       vm.prank(arbitor);
-      uint256 swapOutput = bitsignal.swapCollateral(address(USDT), 900_000e6, 500, 3000);
+      uint256 swapOutput = bitsignal.swapCollateral(900_000e6, hops, fees);
       // simulate change after swap
       uint256 change = 10_000*10**USDC.decimals(); 
       vm.prank(usdcWhale);
