@@ -24,7 +24,7 @@ interface AggregatorV3Interface {
 contract BitSignal is Ownable {
 
     event BetStarted();
-    event BetSettled();
+    event BetSettled(address winner);
 
     uint256 constant BET_LENGTH = 90 days;
     uint256 constant PRICE_THRESHOLD = 1_000_000; // 1 million USD per BTC
@@ -173,7 +173,7 @@ contract BitSignal is Ownable {
             winner = counterparty;
         }
 
-        emit BetSettled();
+        emit BetSettled(winner);
     }
 
     /// @notice Fetch the token price with 8 decimals included
