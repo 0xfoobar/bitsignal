@@ -153,8 +153,11 @@ contract BigSignalTest is Test {
 
     function testSwap() public {
       fundParticipantWallets();
-      startBet();
+      vm.prank(arbitor);
+      vm.expectRevert("bet is not initiated");
+      bitsignal.swapCollateral(900_000e6, hops, fees);
 
+      startBet();
       mockUsdcPriceFeed.setAnswer(99000000);
 
       vm.prank(arbitor);
